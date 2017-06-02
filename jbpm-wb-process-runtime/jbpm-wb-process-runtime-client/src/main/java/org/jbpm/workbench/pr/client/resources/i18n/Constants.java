@@ -321,4 +321,5 @@ public interface Constants extends Messages {
 
     String FilterByDescription();
 
+    String ResourceCouldNotBeLoaded(final String resource);
 }

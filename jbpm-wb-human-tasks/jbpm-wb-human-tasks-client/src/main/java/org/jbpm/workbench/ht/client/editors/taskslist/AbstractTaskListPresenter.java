@@ -29,6 +29,7 @@ import javax.inject.Inject;
 
 import com.google.gwt.user.cellview.client.ColumnSortList;
 import com.google.gwt.view.client.Range;
+import org.dashbuilder.common.client.error.ClientRuntimeError;
 import org.dashbuilder.dataset.DataSet;
 import org.dashbuilder.dataset.DataSetLookup;
 import org.dashbuilder.dataset.DataSetLookupFactory;
@@ -61,6 +62,7 @@ import org.jbpm.workbench.ht.model.events.TaskSelectionEvent;
 import org.jbpm.workbench.ht.service.TaskService;
 import org.uberfire.client.mvp.PlaceStatus;
 import org.uberfire.client.workbench.widgets.common.ErrorPopupPresenter;
+import org.uberfire.ext.widgets.common.client.common.popups.errors.ErrorPopup;
 import org.uberfire.ext.widgets.common.client.menu.RefreshMenuBuilder;
 import org.uberfire.mvp.impl.DefaultPlaceRequest;
 import org.uberfire.workbench.model.menu.MenuFactory;
@@ -206,6 +208,14 @@ public abstract class AbstractTaskListPresenter<V extends AbstractTaskListPresen
                 view.hideBusyIndicator();
             }
 
+            @Override
+            public boolean onError(final ClientRuntimeError error) {
+                view.hideBusyIndicator();
+
+                ErrorPopup.showMessage(Constants.INSTANCE.TaskListCouldNotBeLoaded());
+
+                return false;
+            }
         };
     }
 

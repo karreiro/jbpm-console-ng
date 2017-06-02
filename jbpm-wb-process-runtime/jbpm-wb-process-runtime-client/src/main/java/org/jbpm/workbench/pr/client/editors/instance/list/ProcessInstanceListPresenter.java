@@ -23,6 +23,7 @@ import javax.inject.Inject;
 
 import com.google.gwt.user.cellview.client.ColumnSortList;
 import com.google.gwt.view.client.Range;
+import org.dashbuilder.common.client.error.ClientRuntimeError;
 import org.dashbuilder.dataset.DataSet;
 import org.dashbuilder.dataset.DataSetLookup;
 import org.dashbuilder.dataset.DataSetLookupFactory;
@@ -62,6 +63,7 @@ import org.uberfire.client.annotations.WorkbenchScreen;
 import org.uberfire.client.mvp.PlaceStatus;
 import org.uberfire.client.workbench.events.BeforeClosePlaceEvent;
 import org.uberfire.client.workbench.widgets.common.ErrorPopupPresenter;
+import org.uberfire.ext.widgets.common.client.common.popups.errors.ErrorPopup;
 import org.uberfire.ext.widgets.common.client.menu.RefreshMenuBuilder;
 import org.uberfire.lifecycle.OnOpen;
 import org.uberfire.mvp.Command;
@@ -221,6 +223,14 @@ public class ProcessInstanceListPresenter extends AbstractMultiGridPresenter<Pro
                 view.hideBusyIndicator();
             }
 
+            @Override
+            public boolean onError(final ClientRuntimeError error) {
+                view.hideBusyIndicator();
+
+                ErrorPopup.showMessage(Constants.INSTANCE.ResourceCouldNotBeLoaded(Constants.INSTANCE.Process_Instances()));
+
+                return false;
+            }
         };
     }
 

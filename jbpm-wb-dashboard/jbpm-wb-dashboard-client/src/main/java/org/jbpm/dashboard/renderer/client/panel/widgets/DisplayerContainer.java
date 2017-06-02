@@ -30,6 +30,7 @@ import org.dashbuilder.displayer.client.DisplayerListener;
 import org.jbpm.dashboard.renderer.client.panel.i18n.DashboardConstants;
 import org.kie.workbench.common.workbench.client.resources.i18n.DefaultWorkbenchConstants;
 import org.uberfire.client.mvp.UberView;
+import org.uberfire.ext.widgets.common.client.common.popups.errors.ErrorPopup;
 
 import static org.kie.workbench.common.workbench.client.error.DefaultWorkbenchErrorCallback.isKieServerForbiddenException;
 import static org.kie.workbench.common.workbench.client.error.DefaultWorkbenchErrorCallback.isKieServerUnauthorizedException;
@@ -159,7 +160,9 @@ public class DisplayerContainer implements IsWidget {
         } else if(isKieServerUnauthorizedException(e.getThrowable())){
             view.showError(DefaultWorkbenchConstants.INSTANCE.KieServerError401(), e.getCause());
         } else {
-            view.showError(e.getMessage(), e.getCause());
+            view.showEmpty(currentDisplayer);
+
+            ErrorPopup.showMessage(DashboardConstants.INSTANCE.dashboardCouldNotBeLoaded());
         }
     }
 }
