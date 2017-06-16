@@ -206,7 +206,7 @@ public interface Constants extends Messages {
     String Services();
 
     String Id();
-    
+
     String Errors();
 
     String Logs();
@@ -258,11 +258,11 @@ public interface Constants extends Messages {
     String Last_Modification_Date();
 
     String Process_DeploymentId();
-    
+
     String Basic();
-    
+
     String Advanced();
-    
+
     String Form();
 
     String Parent_Process_Instance();
@@ -310,9 +310,9 @@ public interface Constants extends Messages {
     String SelectServerTemplate();
 
     String ErrorCountNumber(int errCount);
-    
+
     String ErrorCountViewLink();
-    
+
     String FilterByProcessInstanceId();
 
     String FilterByInitiator();
@@ -327,4 +327,5 @@ public interface Constants extends Messages {
 
     String ViewJobs();
 
+    String ResourceCouldNotBeLoaded(String resource);
 }

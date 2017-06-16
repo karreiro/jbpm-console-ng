@@ -23,11 +23,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
-
 import javax.enterprise.event.Event;
 
 import com.google.gwt.view.client.Range;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.dashbuilder.common.client.error.ClientRuntimeError;
 import org.dashbuilder.dataset.DataSet;
 import org.dashbuilder.dataset.DataSetLookup;
 import org.dashbuilder.dataset.DataSetOp;
@@ -64,28 +64,51 @@ import static org.dashbuilder.dataset.filter.FilterFactory.equalsTo;
 import static org.dashbuilder.dataset.filter.FilterFactory.likeTo;
 import static org.jbpm.workbench.common.client.list.AbstractMultiGridView.TAB_SEARCH;
 import static org.jbpm.workbench.common.client.util.TaskUtils.TASK_STATUS_READY;
-import static org.jbpm.workbench.ht.model.TaskDataSetConstants.*;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_ACTUAL_OWNER;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_CREATED_ON;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_DESCRIPTION;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_NAME;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_ORGANIZATIONAL_ENTITY;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_TASK_ID;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_TASK_VARIABLE_NAME;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_TASK_VARIABLE_TASK_NAME;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.COLUMN_TASK_VARIABLE_VALUE;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.HUMAN_TASKS_DATASET;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.HUMAN_TASKS_WITH_ADMIN_DATASET;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.HUMAN_TASKS_WITH_USER_DATASET;
+import static org.jbpm.workbench.ht.model.TaskDataSetConstants.HUMAN_TASKS_WITH_VARIABLES_DATASET;
 import static org.jbpm.workbench.pr.model.ProcessInstanceDataSetConstants.COLUMN_PROCESS_ID;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.eq;
 
 public abstract class AbstractTaskListPresenterTest {
 
     private static final Long TASK_ID = 1L;
+
     private static final String TASK_DEPLOYMENT_ID = "deploymentId";
 
     @Mock
-    private TaskListViewImpl viewMock;
+    protected User identity;
+
+    @Mock
+    protected TaskService taskService;
+
+    protected CallerMock<TaskService> callerMockRemoteTaskService;
+
+    @Mock
+    protected ServerTemplateSelectorMenuBuilder serverTemplateSelectorMenuBuilder;
 
     @Mock
     DataSetQueryHelper dataSetQueryHelper;
 
     @Mock
     DataSetQueryHelper dataSetQueryHelperDomainSpecific;
+
+    @Mock
+    private TaskListViewImpl viewMock;
 
     @Mock
     private ExtendedPagedTable<TaskSummary> extendedPagedTable;
@@ -99,19 +122,8 @@ public abstract class AbstractTaskListPresenterTest {
     @Spy
     private FilterSettings filterSettings;
 
-    @Mock
-    protected User identity;
-
-    @Mock
-    protected TaskService taskService;
-
     @Spy
     private DataSetLookup dataSetLookup;
-
-    protected CallerMock<TaskService> callerMockRemoteTaskService;
-
-    @Mock
-    protected ServerTemplateSelectorMenuBuilder serverTemplateSelectorMenuBuilder;
 
     @Spy
     private Event<TaskSelectionEvent> taskSelected = new EventSourceMock<TaskSelectionEvent>();
@@ -136,7 +148,6 @@ public abstract class AbstractTaskListPresenterTest {
         when(viewMock.getAdvancedSearchFilterSettings()).thenReturn(filterSettings);
         when(filterSettings.getKey()).thenReturn("key");
 
-
         //Mock that actually calls the callbacks
         doAnswer(new Answer() {
 
@@ -145,7 +156,8 @@ public abstract class AbstractTaskListPresenterTest {
                 ((DataSetReadyCallback) invocation.getArguments()[1]).callback(dataSetMock);
                 return null;
             }
-        }).when(dataSetQueryHelper).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
+        }).when(dataSetQueryHelper).lookupDataSet(anyInt(),
+                                                  any(DataSetReadyCallback.class));
 
         //Mock that actually calls the callbacks
         doAnswer(new Answer() {
@@ -155,7 +167,8 @@ public abstract class AbstractTaskListPresenterTest {
                 ((DataSetReadyCallback) invocation.getArguments()[1]).callback(dataSetTaskVarMock);
                 return null;
             }
-        }).when(dataSetQueryHelperDomainSpecific).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
+        }).when(dataSetQueryHelperDomainSpecific).lookupDataSet(anyInt(),
+                                                                any(DataSetReadyCallback.class));
     }
 
     protected abstract AbstractTaskListPresenter getPresenter();
@@ -163,65 +176,148 @@ public abstract class AbstractTaskListPresenterTest {
     @Test
     public void getDataTest() {
         getPresenter().setAddingDefaultFilters(false);
-        getPresenter().getData(new Range(0, 5));
+        getPresenter().getData(new Range(0,
+                                         5));
 
         verify(dataSetQueryHelper).setLastSortOrder(SortOrder.ASCENDING);
         verify(dataSetQueryHelper).setLastOrderedColumn(COLUMN_CREATED_ON);
-        verify(dataSetQueryHelper).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
-        verify(dataSetQueryHelperDomainSpecific, never()).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
+        verify(dataSetQueryHelper).lookupDataSet(anyInt(),
+                                                 any(DataSetReadyCallback.class));
+        verify(dataSetQueryHelperDomainSpecific,
+               never()).lookupDataSet(anyInt(),
+                                      any(DataSetReadyCallback.class));
     }
 
     @Test
     public void releaseTaskTest() {
-        final TaskSummary task = new TaskSummary(TASK_ID, null, null, null, 0, null, null, null, null, null, null, -1, -1, TASK_DEPLOYMENT_ID, -1, new Date(), null, null);
+        final TaskSummary task = new TaskSummary(TASK_ID,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 0,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 -1,
+                                                 -1,
+                                                 TASK_DEPLOYMENT_ID,
+                                                 -1,
+                                                 new Date(),
+                                                 null,
+                                                 null);
 
         getPresenter().releaseTask(task);
 
-        verify(taskService).releaseTask("", TASK_DEPLOYMENT_ID, TASK_ID);
+        verify(taskService).releaseTask("",
+                                        TASK_DEPLOYMENT_ID,
+                                        TASK_ID);
     }
 
     @Test
     public void claimTaskTest() {
-        final TaskSummary task = new TaskSummary(TASK_ID, null, null, null, 0, null, null, null, null, null, null, -1, -1, TASK_DEPLOYMENT_ID, -1, new Date(), null, null);
+        final TaskSummary task = new TaskSummary(TASK_ID,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 0,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 -1,
+                                                 -1,
+                                                 TASK_DEPLOYMENT_ID,
+                                                 -1,
+                                                 new Date(),
+                                                 null,
+                                                 null);
 
         getPresenter().claimTask(task);
 
-        verify(taskService).claimTask("", TASK_DEPLOYMENT_ID, TASK_ID);
+        verify(taskService).claimTask("",
+                                      TASK_DEPLOYMENT_ID,
+                                      TASK_ID);
     }
-    
+
     @Test
     public void resumeTaskTest() {
-        final TaskSummary task = new TaskSummary(TASK_ID, null, null, null, 0, null, null, null, null, null, null, -1, -1, TASK_DEPLOYMENT_ID, -1, new Date(), null, null);
+        final TaskSummary task = new TaskSummary(TASK_ID,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 0,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 -1,
+                                                 -1,
+                                                 TASK_DEPLOYMENT_ID,
+                                                 -1,
+                                                 new Date(),
+                                                 null,
+                                                 null);
 
         getPresenter().resumeTask(task);
 
-        verify(taskService).resumeTask("", TASK_DEPLOYMENT_ID, TASK_ID);
+        verify(taskService).resumeTask("",
+                                       TASK_DEPLOYMENT_ID,
+                                       TASK_ID);
     }
-    
+
     @Test
     public void suspendTaskTest() {
-        final TaskSummary task = new TaskSummary(TASK_ID, null, null, null, 0, null, null, null, null, null, null, -1, -1, TASK_DEPLOYMENT_ID, -1, new Date(), null, null);
+        final TaskSummary task = new TaskSummary(TASK_ID,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 0,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 null,
+                                                 -1,
+                                                 -1,
+                                                 TASK_DEPLOYMENT_ID,
+                                                 -1,
+                                                 new Date(),
+                                                 null,
+                                                 null);
 
         getPresenter().suspendTask(task);
 
-        verify(taskService).suspendTask("", TASK_DEPLOYMENT_ID, TASK_ID);
+        verify(taskService).suspendTask("",
+                                        TASK_DEPLOYMENT_ID,
+                                        TASK_ID);
     }
 
     @Test
     public void isFilteredByTaskNameTest() {
         final String taskName = "taskName";
         final DataSetFilter filter = new DataSetFilter();
-        filter.addFilterColumn(equalsTo(COLUMN_NAME, taskName));
+        filter.addFilterColumn(equalsTo(COLUMN_NAME,
+                                        taskName));
 
         final String filterTaskName = getPresenter().isFilteredByTaskName(Collections.<DataSetOp>singletonList(filter));
-        assertEquals(taskName, filterTaskName);
+        assertEquals(taskName,
+                     filterTaskName);
     }
 
     @Test
     public void isFilteredByTaskNameInvalidTest() {
         final String taskName = "taskName";
         final DataSetFilter filter = new DataSetFilter();
-        filter.addFilterColumn(likeTo(COLUMN_DESCRIPTION, taskName));
+        filter.addFilterColumn(likeTo(COLUMN_DESCRIPTION,
+                                      taskName));
 
         final String filterTaskName = getPresenter().isFilteredByTaskName(Collections.<DataSetOp>singletonList(filter));
         assertNull(filterTaskName);
@@ -231,72 +327,111 @@ public abstract class AbstractTaskListPresenterTest {
     public void testSkipDomainSpecificColumnsForSearchTab() {
         getPresenter().setAddingDefaultFilters(false);
         final DataSetFilter filter = new DataSetFilter();
-        filter.addFilterColumn(equalsTo(COLUMN_NAME, "taskName"));
+        filter.addFilterColumn(equalsTo(COLUMN_NAME,
+                                        "taskName"));
         filterSettings.getDataSetLookup().addOperation(filter);
         filterSettings.setKey(TAB_SEARCH);
         when(filterSettings.getKey()).thenReturn(TAB_SEARCH);
 
         when(dataSetMock.getRowCount()).thenReturn(1);//1 process instance
-        when(dataSetQueryHelper.getColumnLongValue(dataSetMock, COLUMN_TASK_ID, 0)).thenReturn(Long.valueOf(1));
+        when(dataSetQueryHelper.getColumnLongValue(dataSetMock,
+                                                   COLUMN_TASK_ID,
+                                                   0)).thenReturn(Long.valueOf(1));
 
-        getPresenter().getData(new Range(0, 5));
+        getPresenter().getData(new Range(0,
+                                         5));
 
         verifyZeroInteractions(dataSetQueryHelperDomainSpecific);
-        verify(viewMock, times(2)).hideBusyIndicator();
+        verify(viewMock,
+               times(2)).hideBusyIndicator();
     }
 
     @Test
     public void getDomainSpecificDataForTasksTest() {
         getPresenter().setAddingDefaultFilters(false);
         final DataSetFilter filter = new DataSetFilter();
-        filter.addFilterColumn(equalsTo(COLUMN_NAME, "taskName"));
+        filter.addFilterColumn(equalsTo(COLUMN_NAME,
+                                        "taskName"));
         filterSettings.getDataSetLookup().addOperation(filter);
 
         when(dataSetMock.getRowCount()).thenReturn(1);//1 task
         //Task summary creation
-        when(dataSetQueryHelper.getColumnLongValue(dataSetMock, COLUMN_TASK_ID, 0)).thenReturn(Long.valueOf(1));
+        when(dataSetQueryHelper.getColumnLongValue(dataSetMock,
+                                                   COLUMN_TASK_ID,
+                                                   0)).thenReturn(Long.valueOf(1));
 
         when(dataSetTaskVarMock.getRowCount()).thenReturn(2); //two domain variables associated
-        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock, COLUMN_TASK_ID, 0)).thenReturn(Long.valueOf(1));
+        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock,
+                                                                 COLUMN_TASK_ID,
+                                                                 0)).thenReturn(Long.valueOf(1));
         String taskVariable1 = "var1";
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_NAME, 0)).thenReturn(taskVariable1);
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_VALUE, 0)).thenReturn("value1");
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_NAME,
+                                                                   0)).thenReturn(taskVariable1);
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_VALUE,
+                                                                   0)).thenReturn("value1");
 
-        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock, COLUMN_TASK_ID, 1)).thenReturn(Long.valueOf(1));
+        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock,
+                                                                 COLUMN_TASK_ID,
+                                                                 1)).thenReturn(Long.valueOf(1));
         String taskVariable2 = "var2";
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_NAME, 1)).thenReturn(taskVariable2);
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_VALUE, 1)).thenReturn("value2");
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_NAME,
+                                                                   1)).thenReturn(taskVariable2);
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_VALUE,
+                                                                   1)).thenReturn("value2");
 
         Set<String> expectedColumns = new HashSet<String>();
         expectedColumns.add(taskVariable1);
         expectedColumns.add(taskVariable2);
 
-        getPresenter().getData(new Range(0, 5));
+        getPresenter().getData(new Range(0,
+                                         5));
 
         ArgumentCaptor<Set> argument = ArgumentCaptor.forClass(Set.class);
-        verify(viewMock).addDomainSpecifColumns(any(ExtendedPagedTable.class), argument.capture());
+        verify(viewMock).addDomainSpecifColumns(any(ExtendedPagedTable.class),
+                                                argument.capture());
 
-        assertEquals(expectedColumns, argument.getValue());
+        assertEquals(expectedColumns,
+                     argument.getValue());
 
-        verify(dataSetQueryHelper).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
-        verify(dataSetQueryHelperDomainSpecific).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
+        verify(dataSetQueryHelper).lookupDataSet(anyInt(),
+                                                 any(DataSetReadyCallback.class));
+        verify(dataSetQueryHelperDomainSpecific).lookupDataSet(anyInt(),
+                                                               any(DataSetReadyCallback.class));
 
         when(dataSetTaskVarMock.getRowCount()).thenReturn(1); //one domain variables associated
-        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock, COLUMN_TASK_ID, 0)).thenReturn(Long.valueOf(1));
+        when(dataSetQueryHelperDomainSpecific.getColumnLongValue(dataSetTaskVarMock,
+                                                                 COLUMN_TASK_ID,
+                                                                 0)).thenReturn(Long.valueOf(1));
         taskVariable1 = "varTest1";
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_NAME, 0)).thenReturn(taskVariable1);
-        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock, COLUMN_TASK_VARIABLE_VALUE, 0)).thenReturn("value1");
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_NAME,
+                                                                   0)).thenReturn(taskVariable1);
+        when(dataSetQueryHelperDomainSpecific.getColumnStringValue(dataSetTaskVarMock,
+                                                                   COLUMN_TASK_VARIABLE_VALUE,
+                                                                   0)).thenReturn("value1");
 
         expectedColumns = Collections.singleton(taskVariable1);
 
-        getPresenter().getData(new Range(0, 5));
+        getPresenter().getData(new Range(0,
+                                         5));
 
         argument = ArgumentCaptor.forClass(Set.class);
-        verify(viewMock, times(2)).addDomainSpecifColumns(any(ExtendedPagedTable.class), argument.capture());
+        verify(viewMock,
+               times(2)).addDomainSpecifColumns(any(ExtendedPagedTable.class),
+                                                argument.capture());
 
-        assertEquals(expectedColumns, argument.getValue());
-        verify(dataSetQueryHelper, times(2)).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
-        verify(dataSetQueryHelperDomainSpecific, times(2)).lookupDataSet(anyInt(), any(DataSetReadyCallback.class));
+        assertEquals(expectedColumns,
+                     argument.getValue());
+        verify(dataSetQueryHelper,
+               times(2)).lookupDataSet(anyInt(),
+                                       any(DataSetReadyCallback.class));
+        verify(dataSetQueryHelperDomainSpecific,
+               times(2)).lookupDataSet(anyInt(),
+                                       any(DataSetReadyCallback.class));
     }
 
     @Test
@@ -310,10 +445,12 @@ public abstract class AbstractTaskListPresenterTest {
         for (final String dataSet : dataSets) {
             when(dataSetMock.getUUID()).thenReturn(dataSet);
 
-            final TaskSummary summary = getPresenter().createTaskSummaryFromDataSet(dataSetMock, 0);
+            final TaskSummary summary = getPresenter().createTaskSummaryFromDataSet(dataSetMock,
+                                                                                    0);
 
             assertNotNull(summary);
-            assertEquals(HUMAN_TASKS_WITH_ADMIN_DATASET.equals(dataSet), summary.isForAdmin());
+            assertEquals(HUMAN_TASKS_WITH_ADMIN_DATASET.equals(dataSet),
+                         summary.isForAdmin());
         }
     }
 
@@ -324,7 +461,8 @@ public abstract class AbstractTaskListPresenterTest {
         getPresenter().onSearchEvent(searchEvent);
 
         verify(viewMock).applyFilterOnPresenter(anyString());
-        assertEquals(searchEvent.getFilter(), getPresenter().getTextSearchStr());
+        assertEquals(searchEvent.getFilter(),
+                     getPresenter().getTextSearchStr());
     }
 
     @Test
@@ -334,7 +472,8 @@ public abstract class AbstractTaskListPresenterTest {
         getPresenter().onSearchEvent(searchEvent);
 
         verify(viewMock).applyFilterOnPresenter(anyString());
-        assertEquals(searchEvent.getFilter(), getPresenter().getTextSearchStr());
+        assertEquals(searchEvent.getFilter(),
+                     getPresenter().getTextSearchStr());
     }
 
     @Test
@@ -362,26 +501,34 @@ public abstract class AbstractTaskListPresenterTest {
     public void testSearchFilterId() {
         final List<ColumnFilter> filters = getPresenter().getColumnFilters("1");
 
-        assertEquals(1, filters.size());
-        assertEquals(COLUMN_TASK_ID, filters.get(0).getColumnId());
+        assertEquals(1,
+                     filters.size());
+        assertEquals(COLUMN_TASK_ID,
+                     filters.get(0).getColumnId());
     }
 
     @Test
     public void testSearchFilterIdTrim() {
         final List<ColumnFilter> filters = getPresenter().getColumnFilters(" 1 ");
 
-        assertEquals(1, filters.size());
-        assertEquals(COLUMN_TASK_ID, filters.get(0).getColumnId());
+        assertEquals(1,
+                     filters.size());
+        assertEquals(COLUMN_TASK_ID,
+                     filters.get(0).getColumnId());
     }
 
     @Test
     public void testSearchFilterString() {
         final List<ColumnFilter> filters = getPresenter().getColumnFilters("taskName");
 
-        assertEquals(3, filters.size());
-        assertEquals(COLUMN_NAME, filters.get(0).getColumnId());
-        assertEquals(COLUMN_DESCRIPTION, filters.get(1).getColumnId());
-        assertEquals(COLUMN_PROCESS_ID, filters.get(2).getColumnId());
+        assertEquals(3,
+                     filters.size());
+        assertEquals(COLUMN_NAME,
+                     filters.get(0).getColumnId());
+        assertEquals(COLUMN_DESCRIPTION,
+                     filters.get(1).getColumnId());
+        assertEquals(COLUMN_PROCESS_ID,
+                     filters.get(2).getColumnId());
     }
 
     @Test
@@ -408,36 +555,52 @@ public abstract class AbstractTaskListPresenterTest {
 
         List<ColumnFilter> columnFilters = ((LogicalExprFilter) userTaskFilter).getLogicalTerms();
 
-        assertEquals(columnFilters.size(), 2);
-        assertEquals(((LogicalExprFilter) userTaskFilter).getLogicalOperator(), LogicalExprType.OR);
+        assertEquals(columnFilters.size(),
+                     2);
+        assertEquals(((LogicalExprFilter) userTaskFilter).getLogicalOperator(),
+                     LogicalExprType.OR);
 
-        assertEquals(((LogicalExprFilter) columnFilters.get(0)).getLogicalOperator(), LogicalExprType.AND);
+        assertEquals(((LogicalExprFilter) columnFilters.get(0)).getLogicalOperator(),
+                     LogicalExprType.AND);
         List<ColumnFilter> userGroupFilter = ((LogicalExprFilter) columnFilters.get(0)).getLogicalTerms();
-        assertEquals(userGroupFilter.size(), 2);
-        assertEquals(((LogicalExprFilter) userGroupFilter.get(0)).getLogicalOperator(), LogicalExprType.OR);
+        assertEquals(userGroupFilter.size(),
+                     2);
+        assertEquals(((LogicalExprFilter) userGroupFilter.get(0)).getLogicalOperator(),
+                     LogicalExprType.OR);
 
         List<ColumnFilter> groupFilter = ((LogicalExprFilter) userGroupFilter.get(0)).getLogicalTerms();
         List<ColumnFilter> withoutActualOwnerFilter = ((LogicalExprFilter) userGroupFilter.get(1)).getLogicalTerms();
 
-        assertEquals(((LogicalExprFilter) userGroupFilter.get(1)).getLogicalOperator(), LogicalExprType.OR);
-        assertEquals(withoutActualOwnerFilter.size(), 2);
-        assertEquals(COLUMN_ACTUAL_OWNER, withoutActualOwnerFilter.get(0).getColumnId());
-        assertEquals(COLUMN_ACTUAL_OWNER, withoutActualOwnerFilter.get(1).getColumnId());
+        assertEquals(((LogicalExprFilter) userGroupFilter.get(1)).getLogicalOperator(),
+                     LogicalExprType.OR);
+        assertEquals(withoutActualOwnerFilter.size(),
+                     2);
+        assertEquals(COLUMN_ACTUAL_OWNER,
+                     withoutActualOwnerFilter.get(0).getColumnId());
+        assertEquals(COLUMN_ACTUAL_OWNER,
+                     withoutActualOwnerFilter.get(1).getColumnId());
 
-        assertEquals(((LogicalExprFilter) userGroupFilter.get(0)).getLogicalOperator(), LogicalExprType.OR);
-        assertEquals(groupFilter.size(), 3);
-        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY, groupFilter.get(0).getColumnId());
-        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY, groupFilter.get(1).getColumnId());
-        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY, groupFilter.get(2).getColumnId());
+        assertEquals(((LogicalExprFilter) userGroupFilter.get(0)).getLogicalOperator(),
+                     LogicalExprType.OR);
+        assertEquals(groupFilter.size(),
+                     3);
+        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY,
+                     groupFilter.get(0).getColumnId());
+        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY,
+                     groupFilter.get(1).getColumnId());
+        assertEquals(COLUMN_ORGANIZATIONAL_ENTITY,
+                     groupFilter.get(2).getColumnId());
 
         ColumnFilter userOwnerFilter = columnFilters.get(1);
-        assertEquals(userOwnerFilter.getColumnId(), COLUMN_ACTUAL_OWNER);
+        assertEquals(userOwnerFilter.getColumnId(),
+                     COLUMN_ACTUAL_OWNER);
     }
-    
+
     @Test
     public void testMenus() {
         final Menus menus = getPresenter().getMenus();
-        assertEquals(4, menus.getItems().size());
+        assertEquals(4,
+                     menus.getItems().size());
     }
 
     @Test
@@ -451,15 +614,15 @@ public abstract class AbstractTaskListPresenterTest {
     }
 
     @Test
-    public void testIsNullTableSettingsPrototype(){
+    public void testIsNullTableSettingsPrototype() {
         when(identity.getIdentifier()).thenReturn("user");
         getPresenter().setIdentity(identity);
         FilterSettings filterSettings = getPresenter().createTableSettingsPrototype();
-        List <DataSetOp> ops = filterSettings.getDataSetLookup().getOperationList();
-        for(DataSetOp op : ops){
-            if(op.getType().equals(DataSetOpType.FILTER)){
-                List<ColumnFilter> columnFilters = ((DataSetFilter)op).getColumnFilterList();
-                for(ColumnFilter columnFilter : columnFilters){
+        List<DataSetOp> ops = filterSettings.getDataSetLookup().getOperationList();
+        for (DataSetOp op : ops) {
+            if (op.getType().equals(DataSetOpType.FILTER)) {
+                List<ColumnFilter> columnFilters = ((DataSetFilter) op).getColumnFilterList();
+                for (ColumnFilter columnFilter : columnFilters) {
                     assertTrue((columnFilter).toString().contains(COLUMN_ACTUAL_OWNER + " is_null"));
                 }
             }
@@ -467,13 +630,13 @@ public abstract class AbstractTaskListPresenterTest {
     }
 
     @Test
-    public void getVariablesTableSettingsTest(){
+    public void getVariablesTableSettingsTest() {
         FilterSettings filterSettings = getPresenter().getVariablesTableSettings("Test");
-        List <DataSetOp> ops = filterSettings.getDataSetLookup().getOperationList();
-        for(DataSetOp op : ops){
-            if(op.getType().equals(DataSetOpType.FILTER)){
-                List<ColumnFilter> columnFilters = ((DataSetFilter)op).getColumnFilterList();
-                for(ColumnFilter columnFilter : columnFilters){
+        List<DataSetOp> ops = filterSettings.getDataSetLookup().getOperationList();
+        for (DataSetOp op : ops) {
+            if (op.getType().equals(DataSetOpType.FILTER)) {
+                List<ColumnFilter> columnFilters = ((DataSetFilter) op).getColumnFilterList();
+                for (ColumnFilter columnFilter : columnFilters) {
                     assertTrue((columnFilter).toString().contains(COLUMN_TASK_VARIABLE_TASK_NAME + " = Test"));
                 }
             }
@@ -481,8 +644,24 @@ public abstract class AbstractTaskListPresenterTest {
     }
 
     @Test
-    public void testDatasetName(){
-        assertEquals(getDataSetId(), getPresenter().createTableSettingsPrototype().getDataSetLookup().getDataSetUUID());
+    public void testDatasetName() {
+        assertEquals(getDataSetId(),
+                     getPresenter().createTableSettingsPrototype().getDataSetLookup().getDataSetUUID());
     }
 
+    @Test
+    public void testCreateDataSetTaskCallback() {
+        final AbstractTaskListPresenter presenter = spy(getPresenter());
+        final ClientRuntimeError error = new ClientRuntimeError("");
+        final FilterSettings filterSettings = mock(FilterSettings.class);
+        final DataSetReadyCallback callback = presenter.createDataSetTaskCallback(0,
+                                                                                  filterSettings);
+
+        doNothing().when(presenter).showErrorPopup(any());
+
+        assertFalse(callback.onError(error));
+
+        verify(viewMock).hideBusyIndicator();
+        verify(presenter).showErrorPopup(Constants.INSTANCE.TaskListCouldNotBeLoaded());
+    }
 }
