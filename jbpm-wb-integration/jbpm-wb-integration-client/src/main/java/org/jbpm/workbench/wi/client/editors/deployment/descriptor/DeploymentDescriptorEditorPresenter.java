@@ -50,7 +50,7 @@ import org.uberfire.workbench.events.NotificationEvent;
 import org.uberfire.workbench.model.menu.Menus;
 
 @WorkbenchEditor(identifier = "org.kie.jbpmconsole.dd", supportedTypes = {DDResourceType.class}, priority = 101)
-public class DeploymentDescriptorEditorPresenter extends KieEditor {
+public class DeploymentDescriptorEditorPresenter extends KieEditor<DeploymentDescriptorModel> {
 
     private Caller<DDEditorService> ddEditorService;
 
